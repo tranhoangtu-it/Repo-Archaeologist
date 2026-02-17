@@ -191,8 +191,11 @@ class StaticAnalyzer {
       const extensions = ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.go'];
       for (const ext of extensions) {
         const withExt = resolved + ext;
-        if (fs.access(withExt).then(() => true).catch(() => false)) {
+        try {
+          require('fs').accessSync(withExt);
           return withExt;
+        } catch (e) {
+          // File doesn't exist, try next extension
         }
       }
       return resolved;
