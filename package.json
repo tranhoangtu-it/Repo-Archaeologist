@@ -1,0 +1,39 @@
+{
+  "name": "repo-archaeologist",
+  "version": "1.0.0",
+  "description": "A CLI that reconstructs a repository's living architecture using static analysis, call graphs, and Git history",
+  "main": "src/index.js",
+  "bin": {
+    "repo-archaeologist": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js",
+    "test": "jest",
+    "lint": "eslint src/**/*.js"
+  },
+  "keywords": [
+    "git",
+    "architecture",
+    "static-analysis",
+    "code-analysis",
+    "call-graph",
+    "dead-code",
+    "refactoring"
+  ],
+  "author": "Trần Hoàng Tú",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.1.0",
+    "simple-git": "^3.22.0",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1",
+    "cli-table3": "^0.6.3"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.56.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
