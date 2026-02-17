@@ -1,0 +1,759 @@
+{
+  "repository": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist",
+  "totalFiles": 10,
+  "files": [
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js",
+      "language": "javascript",
+      "size": 1624,
+      "lines": 47,
+      "imports": [
+        "commander",
+        "../src/commands/analyze",
+        "../src/commands/map",
+        "../src/commands/onboard",
+        "../src/commands/risk",
+        "../package.json"
+      ],
+      "functions": [],
+      "classes": [],
+      "exports": [],
+      "complexity": 6,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".eslintrc.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "README.md",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "bin/cli.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "package-lock.json",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/analyze.js",
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/map.js",
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/onboard.js",
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/risk.js"
+        ],
+        "calledBy": []
+      }
+    },
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/git-analyzer.js",
+      "language": "javascript",
+      "size": 3759,
+      "lines": 138,
+      "imports": [
+        "simple-git",
+        "path"
+      ],
+      "functions": [],
+      "classes": [
+        "GitAnalyzer"
+      ],
+      "exports": [],
+      "complexity": 23,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".eslintrc.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "README.md",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "bin/cli.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "package-lock.json",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [],
+        "calledBy": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+        ]
+      }
+    },
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js",
+      "language": "javascript",
+      "size": 5777,
+      "lines": 183,
+      "imports": [
+        "./git-analyzer",
+        "./static-analyzer",
+        "path"
+      ],
+      "functions": [],
+      "classes": [
+        "RepositoryAnalyzer"
+      ],
+      "exports": [],
+      "complexity": 63,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".eslintrc.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "README.md",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "bin/cli.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "package-lock.json",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/git-analyzer.js",
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/static-analyzer.js"
+        ],
+        "calledBy": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/analyze.js",
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/map.js",
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/onboard.js",
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/risk.js",
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/tests/repository-analyzer.test.js"
+        ]
+      }
+    },
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/static-analyzer.js",
+      "language": "javascript",
+      "size": 7104,
+      "lines": 232,
+      "imports": [
+        "fs",
+        "path"
+      ],
+      "functions": [
+        "walk"
+      ],
+      "classes": [
+        "StaticAnalyzer"
+      ],
+      "exports": [],
+      "complexity": 83,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".eslintrc.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "README.md",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "bin/cli.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "package-lock.json",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [],
+        "calledBy": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js",
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/tests/static-analyzer.test.js"
+        ]
+      }
+    },
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/analyze.js",
+      "language": "javascript",
+      "size": 3398,
+      "lines": 99,
+      "imports": [
+        "../analyzers/repository-analyzer",
+        "fs",
+        "chalk",
+        "ora"
+      ],
+      "functions": [
+        "analyze",
+        "displayTextAnalysis",
+        "formatTextAnalysis"
+      ],
+      "classes": [],
+      "exports": [],
+      "complexity": 10,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".eslintrc.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "README.md",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "bin/cli.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "package-lock.json",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+        ],
+        "calledBy": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js"
+        ]
+      }
+    },
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/map.js",
+      "language": "javascript",
+      "size": 4312,
+      "lines": 121,
+      "imports": [
+        "../analyzers/repository-analyzer",
+        "fs",
+        "chalk",
+        "ora",
+        "path"
+      ],
+      "functions": [
+        "map",
+        "generateMarkdownMap"
+      ],
+      "classes": [],
+      "exports": [],
+      "complexity": 30,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".eslintrc.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "README.md",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "bin/cli.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "package-lock.json",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+        ],
+        "calledBy": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js"
+        ]
+      }
+    },
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/onboard.js",
+      "language": "javascript",
+      "size": 5571,
+      "lines": 145,
+      "imports": [
+        "../analyzers/repository-analyzer",
+        "fs",
+        "chalk",
+        "ora",
+        "path"
+      ],
+      "functions": [
+        "onboard",
+        "generateOnboardingReport"
+      ],
+      "classes": [],
+      "exports": [],
+      "complexity": 28,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".eslintrc.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "README.md",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "bin/cli.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "package-lock.json",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+        ],
+        "calledBy": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js"
+        ]
+      }
+    },
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/risk.js",
+      "language": "javascript",
+      "size": 6467,
+      "lines": 170,
+      "imports": [
+        "../analyzers/repository-analyzer",
+        "fs",
+        "chalk",
+        "ora",
+        "cli-table3",
+        "path"
+      ],
+      "functions": [
+        "risk",
+        "displayRiskReport",
+        "avgRisk",
+        "generateRiskReport"
+      ],
+      "classes": [],
+      "exports": [],
+      "complexity": 22,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".eslintrc.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "README.md",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "bin/cli.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "package-lock.json",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+        ],
+        "calledBy": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js"
+        ]
+      }
+    },
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/tests/repository-analyzer.test.js",
+      "language": "javascript",
+      "size": 4715,
+      "lines": 136,
+      "imports": [
+        "../src/analyzers/repository-analyzer",
+        "fs",
+        "path",
+        "os",
+        "simple-git"
+      ],
+      "functions": [],
+      "classes": [],
+      "exports": [],
+      "complexity": 1,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "jest.config.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "tests/repository-analyzer.test.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "tests/static-analyzer.test.js",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+        ],
+        "calledBy": []
+      }
+    },
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/tests/static-analyzer.test.js",
+      "language": "javascript",
+      "size": 5802,
+      "lines": 179,
+      "imports": [
+        "../src/analyzers/static-analyzer",
+        "fs",
+        "path",
+        "os",
+        "express",
+        "module",
+        "./file2",
+        "./used"
+      ],
+      "functions": [
+        "myFunction",
+        "test"
+      ],
+      "classes": [
+        "MyClass"
+      ],
+      "exports": [
+        "MyClass",
+        "used"
+      ],
+      "complexity": 12,
+      "ownership": {
+        "primary": "copilot-swe-agent[bot]",
+        "contributors": [
+          {
+            "author": "copilot-swe-agent[bot]",
+            "commits": 1
+          }
+        ],
+        "totalCommits": 1
+      },
+      "changeFrequency": 0,
+      "coChangedFiles": [
+        {
+          "file": ".gitignore",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "jest.config.json",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "tests/repository-analyzer.test.js",
+          "count": 1,
+          "correlation": 1
+        },
+        {
+          "file": "tests/static-analyzer.test.js",
+          "count": 1,
+          "correlation": 1
+        }
+      ],
+      "callGraphInfo": {
+        "calls": [
+          "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/static-analyzer.js"
+        ],
+        "calledBy": []
+      }
+    }
+  ],
+  "callGraph": {
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js": {
+      "calls": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/analyze.js",
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/map.js",
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/onboard.js",
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/risk.js"
+      ],
+      "calledBy": []
+    },
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/git-analyzer.js": {
+      "calls": [],
+      "calledBy": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+      ]
+    },
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js": {
+      "calls": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/git-analyzer.js",
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/static-analyzer.js"
+      ],
+      "calledBy": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/analyze.js",
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/map.js",
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/onboard.js",
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/risk.js",
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/tests/repository-analyzer.test.js"
+      ]
+    },
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/static-analyzer.js": {
+      "calls": [],
+      "calledBy": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js",
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/tests/static-analyzer.test.js"
+      ]
+    },
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/analyze.js": {
+      "calls": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+      ],
+      "calledBy": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js"
+      ]
+    },
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/map.js": {
+      "calls": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+      ],
+      "calledBy": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js"
+      ]
+    },
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/onboard.js": {
+      "calls": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+      ],
+      "calledBy": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js"
+      ]
+    },
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/commands/risk.js": {
+      "calls": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+      ],
+      "calledBy": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/bin/cli.js"
+      ]
+    },
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/tests/repository-analyzer.test.js": {
+      "calls": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/repository-analyzer.js"
+      ],
+      "calledBy": []
+    },
+    "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/tests/static-analyzer.test.js": {
+      "calls": [
+        "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/src/analyzers/static-analyzer.js"
+      ],
+      "calledBy": []
+    }
+  },
+  "deadCode": [
+    {
+      "path": "/home/runner/work/Repo-Archaeologist/Repo-Archaeologist/tests/static-analyzer.test.js",
+      "reason": "No imports found from other files",
+      "exports": [
+        "MyClass",
+        "used"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "languages": {
+    "javascript": {
+      "count": 10,
+      "totalLines": 1450,
+      "totalSize": 48529
+    }
+  },
+  "topContributors": [
+    {
+      "author": "copilot-swe-agent[bot]",
+      "filesOwned": 10,
+      "totalCommits": 10
+    }
+  ],
+  "analyzedAt": "2026-02-17T19:05:01.482Z"
+}
