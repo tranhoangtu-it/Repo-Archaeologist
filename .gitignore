@@ -10,3 +10,7 @@ coverage/
 *.swo
 *~
 tmp/
+analysis-output.txt
+architecture-map.md
+ONBOARDING.md
+risk-report.md
