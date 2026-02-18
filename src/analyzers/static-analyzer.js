@@ -1,4 +1,5 @@
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 
 class StaticAnalyzer {
@@ -35,6 +36,7 @@ class StaticAnalyzer {
       go: {
         extensions: ['.go'],
         importPattern: /import\s+(?:.*?"(.+?)"|"(.+?)")/g,
+        groupedImportPattern: /import\s*\(\s*([\s\S]*?)\)/g,
         functionPattern: /func\s+(?:\([^)]+\)\s+)?(\w+)\s*\(/g,
         structPattern: /type\s+(\w+)\s+struct/g
       }
@@ -63,6 +65,14 @@ class StaticAnalyzer {
         exports: this.extractMatches(content, patterns.exportPattern),
         complexity: this.calculateComplexity(content)
       };
+
+      // Handle Go grouped imports: import ( "fmt" \n "os" )
+      if (patterns.groupedImportPattern) {
+        const groupedImports = this.extractGroupedImports(content, patterns.groupedImportPattern);
+        groupedImports.forEach(imp => analysis.imports.push(imp));
+        // Deduplicate
+        analysis.imports = [...new Set(analysis.imports)];
+      }
 
       if (patterns.interfacePattern) {
         analysis.interfaces = this.extractMatches(content, patterns.interfacePattern);
@@ -103,6 +113,20 @@ class StaticAnalyzer {
     return Array.from(matches);
   }
 
+  extractGroupedImports(content, pattern) {
+    const imports = [];
+    let match;
+    while ((match = pattern.exec(content)) !== null) {
+      const block = match[1];
+      const linePattern = /"(.+?)"/g;
+      let lineMatch;
+      while ((lineMatch = linePattern.exec(block)) !== null) {
+        imports.push(lineMatch[1]);
+      }
+    }
+    return imports;
+  }
+
   calculateComplexity(content) {
     const complexityKeywords = [
       { pattern: /\bif\b/g, name: 'if' },
@@ -113,7 +137,7 @@ class StaticAnalyzer {
       { pattern: /\bcase\b/g, name: 'case' },
       { pattern: /&&/g, name: '&&' },
       { pattern: /\|\|/g, name: '||' },
-      { pattern: /\?/g, name: '?' },
+      { pattern: /(?<!\?)\?(?![.?])/g, name: '?' },
       { pattern: /\btry\b/g, name: 'try' },
       { pattern: /\bcatch\b/g, name: 'catch' }
     ];
@@ -132,28 +156,54 @@ class StaticAnalyzer {
   async analyzeDirectory(dirPath, ignorePatterns = ['node_modules', '.git', 'dist', 'build', 'coverage']) {
     const analyses = [];
     const self = this;
-    
+    const visitedDirs = new Set();
+
+    function shouldIgnore(entryName) {
+      return ignorePatterns.some(pattern => entryName === pattern);
+    }
+
     async function walk(dir) {
+      // Symlink cycle detection via realpath
+      let realDir;
+      try {
+        realDir = await fs.realpath(dir);
+      } catch {
+        return; // broken symlink
+      }
+      if (visitedDirs.has(realDir)) return;
+      visitedDirs.add(realDir);
+
       const entries = await fs.readdir(dir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
+        if (shouldIgnore(entry.name)) continue;
+
         const fullPath = path.join(dir, entry.name);
-        
-        if (ignorePatterns.some(pattern => fullPath.includes(pattern))) {
-          continue;
-        }
-        
-        if (entry.isDirectory()) {
+
+        if (entry.isDirectory() || entry.isSymbolicLink()) {
+          // Check if symlink points to a directory
+          if (entry.isSymbolicLink()) {
+            try {
+              const stat = await fs.stat(fullPath);
+              if (!stat.isDirectory()) {
+                if (stat.isFile()) {
+                  const analysis = await self.analyzeFile(fullPath);
+                  if (analysis) analyses.push(analysis);
+                }
+                continue;
+              }
+            } catch {
+              continue; // broken symlink
+            }
+          }
           await walk(fullPath);
         } else if (entry.isFile()) {
           const analysis = await self.analyzeFile(fullPath);
-          if (analysis) {
-            analyses.push(analysis);
-          }
+          if (analysis) analyses.push(analysis);
         }
       }
     }
-    
+
     await walk(dirPath);
     return analyses;
   }
@@ -192,7 +242,7 @@ class StaticAnalyzer {
       for (const ext of extensions) {
         const withExt = resolved + ext;
         try {
-          require('fs').accessSync(withExt);
+          fsSync.accessSync(withExt);
           return withExt;
         } catch (e) {
           // File doesn't exist, try next extension
@@ -213,9 +263,10 @@ class StaticAnalyzer {
       
       const isReferenced = graph.calledBy.length > 0;
       const hasExports = analysis.exports && analysis.exports.length > 0;
-      const isEntryPoint = analysis.path.includes('index') || 
-                          analysis.path.includes('main') ||
-                          analysis.path.includes('app');
+      const baseName = path.basename(analysis.path, path.extname(analysis.path));
+      const isEntryPoint = baseName === 'index' ||
+                          baseName === 'main' ||
+                          baseName === 'app';
       
       if (!isReferenced && !isEntryPoint && hasExports) {
         deadFiles.push({

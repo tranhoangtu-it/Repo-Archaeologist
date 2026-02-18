@@ -121,6 +121,23 @@ module.exports = MyClass;
       `;
       expect(analyzer.calculateComplexity(complexCode)).toBeGreaterThan(5);
     });
+
+    test('should not count ?. (optional chaining) as complexity', () => {
+      const code = 'const x = obj?.foo?.bar;';
+      // Only base complexity 1, no ternary counted
+      expect(analyzer.calculateComplexity(code)).toBe(1);
+    });
+
+    test('should not count ?? (nullish coalescing) as complexity', () => {
+      const code = 'const x = a ?? b;';
+      expect(analyzer.calculateComplexity(code)).toBe(1);
+    });
+
+    test('should count ternary ? correctly', () => {
+      const code = 'const x = condition ? a : b;';
+      // Base 1 + ternary 1 = 2
+      expect(analyzer.calculateComplexity(code)).toBe(2);
+    });
   });
 
   describe('analyzeDirectory', () => {
@@ -145,6 +162,31 @@ module.exports = MyClass;
       expect(analyses.length).toBe(1);
       expect(analyses[0].path).toContain('main.js');
     });
+
+    test('should not false-positive ignore dirs with similar names (e.g. build-utils vs build)', async () => {
+      await fs.mkdir(path.join(tempDir, 'build-utils'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'build-utils', 'helper.js'), 'const x = 1;');
+
+      const analyses = await analyzer.analyzeDirectory(tempDir);
+      const helperFile = analyses.find(a => a.path.includes('build-utils'));
+      expect(helperFile).toBeDefined();
+    });
+
+    test('should handle symlink cycles without crashing', async () => {
+      await fs.mkdir(path.join(tempDir, 'dirA'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'dirA', 'file.js'), 'const x = 1;');
+      // Create circular symlink: dirA/link -> tempDir
+      try {
+        await fs.symlink(tempDir, path.join(tempDir, 'dirA', 'link'), 'dir');
+      } catch {
+        // Symlinks may not be supported on all platforms
+        return;
+      }
+
+      // Should complete without infinite loop
+      const analyses = await analyzer.analyzeDirectory(tempDir);
+      expect(analyses.length).toBeGreaterThan(0);
+    });
   });
 
   describe('buildCallGraph', () => {
@@ -163,6 +205,52 @@ module.exports = MyClass;
     });
   });
 
+  describe('extractGroupedImports', () => {
+    test('should extract Go grouped imports', () => {
+      const content = `
+package main
+
+import (
+    "fmt"
+    "os"
+    "strings"
+)
+
+func main() {}
+`;
+      const pattern = /import\s*\(\s*([\s\S]*?)\)/g;
+      const imports = analyzer.extractGroupedImports(content, pattern);
+      expect(imports).toContain('fmt');
+      expect(imports).toContain('os');
+      expect(imports).toContain('strings');
+    });
+  });
+
+  describe('analyzeFile - Go', () => {
+    test('should detect Go grouped imports', async () => {
+      const filePath = path.join(tempDir, 'main.go');
+      const content = `package main
+
+import (
+    "fmt"
+    "os"
+)
+
+func main() {
+    fmt.Println("hello")
+}
+`;
+      await fs.writeFile(filePath, content);
+      const analysis = await analyzer.analyzeFile(filePath);
+
+      expect(analysis).not.toBeNull();
+      expect(analysis.language).toBe('go');
+      expect(analysis.imports).toContain('fmt');
+      expect(analysis.imports).toContain('os');
+      expect(analysis.functions).toContain('main');
+    });
+  });
+
   describe('detectDeadCode', () => {
     test('should detect potentially dead code', async () => {
       await fs.writeFile(path.join(tempDir, 'used.js'), 'export const used = 1;');
@@ -173,6 +261,31 @@ module.exports = MyClass;
       const deadCode = analyzer.detectDeadCode(analyses, callGraph);
 
       expect(Array.isArray(deadCode)).toBe(true);
+    });
+
+    test('should not flag files named index/main/app as dead code', () => {
+      const analyses = [
+        { path: '/repo/src/main.js', exports: ['something'] },
+        { path: '/repo/src/index.js', exports: ['foo'] },
+        { path: '/repo/src/app.js', exports: ['bar'] },
+        { path: '/repo/maintenance/helper.js', exports: ['help'] }
+      ];
+      const callGraph = {
+        '/repo/src/main.js': { calls: [], calledBy: [] },
+        '/repo/src/index.js': { calls: [], calledBy: [] },
+        '/repo/src/app.js': { calls: [], calledBy: [] },
+        '/repo/maintenance/helper.js': { calls: [], calledBy: [] }
+      };
+
+      const deadCode = analyzer.detectDeadCode(analyses, callGraph);
+
+      // main.js, index.js, app.js should NOT be flagged as dead code
+      const deadPaths = deadCode.map(d => d.path);
+      expect(deadPaths).not.toContain('/repo/src/main.js');
+      expect(deadPaths).not.toContain('/repo/src/index.js');
+      expect(deadPaths).not.toContain('/repo/src/app.js');
+      // maintenance/helper.js SHOULD be flagged (basename is "helper", not "main")
+      expect(deadPaths).toContain('/repo/maintenance/helper.js');
     });
   });
 });

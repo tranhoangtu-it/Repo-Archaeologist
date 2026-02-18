@@ -5,10 +5,32 @@ class GitAnalyzer {
   constructor(repoPath) {
     this.repoPath = repoPath;
     this.git = simpleGit(repoPath);
+    this._commitFileCache = new Map();
+    this._isRepoChecked = false;
+  }
+
+  async checkIsRepo() {
+    if (this._isRepoChecked) return;
+    const isRepo = await this.git.checkIsRepo();
+    if (!isRepo) {
+      throw new Error(`Not a git repository: ${this.repoPath}`);
+    }
+    this._isRepoChecked = true;
+  }
+
+  async _getCommitFiles(hash) {
+    if (this._commitFileCache.has(hash)) {
+      return this._commitFileCache.get(hash);
+    }
+    const diffSummary = await this.git.show([hash, '--name-only', '--format=']);
+    const files = diffSummary.split('\n').filter(f => f.trim());
+    this._commitFileCache.set(hash, files);
+    return files;
   }
 
   async getFileHistory(filePath) {
     try {
+      await this.checkIsRepo();
       const log = await this.git.log({ file: filePath });
       return log.all;
     } catch (error) {
@@ -18,6 +40,7 @@ class GitAnalyzer {
 
   async getFileOwnership(filePath) {
     try {
+      await this.checkIsRepo();
       const log = await this.git.log({ file: filePath });
       const authorCounts = {};
       
@@ -46,13 +69,13 @@ class GitAnalyzer {
 
   async getRecentlyModifiedFiles(daysAgo = 90) {
     try {
+      await this.checkIsRepo();
       const since = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
       const log = await this.git.log({ '--since': since });
-      
+
       const fileModifications = {};
       for (const commit of log.all) {
-        const diffSummary = await this.git.show([commit.hash, '--name-only', '--format=']);
-        const files = diffSummary.split('\n').filter(f => f.trim());
+        const files = await this._getCommitFiles(commit.hash);
         
         files.forEach(file => {
           if (!fileModifications[file]) {
@@ -75,6 +98,7 @@ class GitAnalyzer {
 
   async getChangeFrequency(filePath) {
     try {
+      await this.checkIsRepo();
       const log = await this.git.log({ file: filePath });
       const commits = log.all;
       
@@ -94,14 +118,14 @@ class GitAnalyzer {
 
   async getFilesChangedTogether(filePath, threshold = 0.3) {
     try {
+      await this.checkIsRepo();
       const fileLog = await this.git.log({ file: filePath });
       const fileCommits = new Set(fileLog.all.map(c => c.hash));
-      
+
       const coChangedFiles = {};
-      
+
       for (const hash of fileCommits) {
-        const diffSummary = await this.git.show([hash, '--name-only', '--format=']);
-        const files = diffSummary.split('\n').filter(f => f.trim() && f !== filePath);
+        const files = (await this._getCommitFiles(hash)).filter(f => f !== filePath);
         
         files.forEach(file => {
           coChangedFiles[file] = (coChangedFiles[file] || 0) + 1;
@@ -126,6 +150,7 @@ class GitAnalyzer {
 
   async getAllTrackedFiles() {
     try {
+      await this.checkIsRepo();
       const files = await this.git.raw(['ls-files']);
       return files.split('\n').filter(f => f.trim());
     } catch (error) {

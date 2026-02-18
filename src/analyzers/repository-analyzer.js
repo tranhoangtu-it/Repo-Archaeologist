@@ -2,6 +2,8 @@ const { GitAnalyzer } = require('./git-analyzer');
 const { StaticAnalyzer } = require('./static-analyzer');
 const path = require('path');
 
+const GIT_CONCURRENCY_LIMIT = 5;
+
 class RepositoryAnalyzer {
   constructor(repoPath) {
     this.repoPath = path.resolve(repoPath);
@@ -13,13 +15,14 @@ class RepositoryAnalyzer {
     const staticAnalysis = await this.staticAnalyzer.analyzeDirectory(this.repoPath);
     const callGraph = this.staticAnalyzer.buildCallGraph(staticAnalysis);
     const deadCode = this.staticAnalyzer.detectDeadCode(staticAnalysis, callGraph);
-    
-    const filesWithGitInfo = await Promise.all(
-      staticAnalysis.map(async (fileAnalysis) => {
+
+    const filesWithGitInfo = await this._processWithConcurrency(
+      staticAnalysis,
+      async (fileAnalysis) => {
         const ownership = await this.gitAnalyzer.getFileOwnership(fileAnalysis.path);
         const changeFrequency = await this.gitAnalyzer.getChangeFrequency(fileAnalysis.path);
         const coChangedFiles = await this.gitAnalyzer.getFilesChangedTogether(fileAnalysis.path);
-        
+
         return {
           ...fileAnalysis,
           ownership,
@@ -27,7 +30,8 @@ class RepositoryAnalyzer {
           coChangedFiles: coChangedFiles.slice(0, 5),
           callGraphInfo: callGraph[fileAnalysis.path]
         };
-      })
+      },
+      GIT_CONCURRENCY_LIMIT
     );
 
     return {
@@ -150,6 +154,16 @@ class RepositoryAnalyzer {
     });
 
     return categories;
+  }
+
+  async _processWithConcurrency(items, fn, limit) {
+    const results = [];
+    for (let i = 0; i < items.length; i += limit) {
+      const batch = items.slice(i, i + limit);
+      const batchResults = await Promise.all(batch.map(fn));
+      results.push(...batchResults);
+    }
+    return results;
   }
 
   identifyFeatures(files) {
