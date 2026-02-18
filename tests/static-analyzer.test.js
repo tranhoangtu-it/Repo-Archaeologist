@@ -80,6 +80,70 @@ module.exports = MyClass;
       expect(analysis.complexity).toBeGreaterThan(1);
     });
 
+    test('should include dynamic imports extracted from AST', async () => {
+      const filePath = path.join(tempDir, 'dynamic-import.js');
+      const content = `
+async function loadFeature() {
+  const feature = await import('./feature');
+  return feature;
+}
+`;
+      await fs.writeFile(filePath, content);
+
+      const analysis = await analyzer.analyzeFile(filePath);
+
+      expect(analysis).not.toBeNull();
+      expect(analysis.imports).toContain('./feature');
+      expect(analysis.functions).toContain('loadFeature');
+    });
+
+    test('should ignore pseudo imports and exports inside strings/comments', async () => {
+      const filePath = path.join(tempDir, 'false-positive.js');
+      const content = `
+// import fake from 'fake-module';
+// module.exports = Fake;
+const str1 = "require('not-real')";
+const str2 = 'export const nope = true;';
+const tpl = \`module.exports = Something\`;
+
+function realFunction() {
+  return str1 + str2 + tpl;
+}
+`;
+      await fs.writeFile(filePath, content);
+
+      const analysis = await analyzer.analyzeFile(filePath);
+
+      expect(analysis).not.toBeNull();
+      expect(analysis.imports).toEqual([]);
+      expect(analysis.exports).toEqual([]);
+      expect(analysis.functions).toContain('realFunction');
+    });
+
+    test('should analyze TypeScript exports with AST', async () => {
+      const filePath = path.join(tempDir, 'feature.ts');
+      const content = `
+import { helper } from './helper';
+
+export interface FeatureConfig {
+  enabled: boolean;
+}
+
+export const runFeature = () => helper();
+`;
+      await fs.writeFile(filePath, content);
+
+      const analysis = await analyzer.analyzeFile(filePath);
+
+      expect(analysis).not.toBeNull();
+      expect(analysis.language).toBe('typescript');
+      expect(analysis.imports).toContain('./helper');
+      expect(analysis.interfaces).toContain('FeatureConfig');
+      expect(analysis.functions).toContain('runFeature');
+      expect(analysis.exports).toContain('runFeature');
+      expect(analysis.exports).toContain('FeatureConfig');
+    });
+
     test('should return null for unsupported file types', async () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'some text');
@@ -163,6 +227,25 @@ module.exports = MyClass;
       expect(analyses[0].path).toContain('main.js');
     });
 
+    test('should ignore nested relative path patterns', async () => {
+      await fs.mkdir(path.join(tempDir, 'src', 'utils'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'src', 'index.js'), 'const root = true;');
+      await fs.writeFile(path.join(tempDir, 'src', 'utils', 'helper.js'), 'const helper = true;');
+
+      const analyses = await analyzer.analyzeDirectory(tempDir, [
+        'node_modules',
+        '.git',
+        'dist',
+        'build',
+        'coverage',
+        'src/utils'
+      ]);
+      const analyzedPaths = analyses.map(a => a.path);
+
+      expect(analyzedPaths.some(p => p.includes('src/utils/helper.js'))).toBe(false);
+      expect(analyzedPaths.some(p => p.includes('src/index.js'))).toBe(true);
+    });
+
     test('should not false-positive ignore dirs with similar names (e.g. build-utils vs build)', async () => {
       await fs.mkdir(path.join(tempDir, 'build-utils'), { recursive: true });
       await fs.writeFile(path.join(tempDir, 'build-utils', 'helper.js'), 'const x = 1;');
@@ -202,6 +285,85 @@ module.exports = MyClass;
 
       expect(callGraph).toBeDefined();
       expect(Object.keys(callGraph).length).toBe(2);
+    });
+
+    test('should resolve directory index imports in call graph', async () => {
+      const mainPath = path.join(tempDir, 'main.js');
+      const libDir = path.join(tempDir, 'lib');
+      const libIndexPath = path.join(libDir, 'index.js');
+      await fs.mkdir(libDir, { recursive: true });
+      await fs.writeFile(mainPath, "const lib = require('./lib');");
+      await fs.writeFile(libIndexPath, 'module.exports = {};');
+
+      const analyses = await analyzer.analyzeDirectory(tempDir);
+      const callGraph = analyzer.buildCallGraph(analyses);
+
+      expect(callGraph[mainPath].calls).toContain(libIndexPath);
+      expect(callGraph[libIndexPath].calledBy).toContain(mainPath);
+    });
+
+    test('should resolve tsconfig path aliases in call graph', async () => {
+      await fs.writeFile(
+        path.join(tempDir, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            baseUrl: '.',
+            paths: {
+              '@/*': ['src/*']
+            }
+          }
+        }, null, 2)
+      );
+
+      analyzer = new StaticAnalyzer(tempDir);
+      await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+      const mainPath = path.join(tempDir, 'src', 'main.ts');
+      const corePath = path.join(tempDir, 'src', 'core.ts');
+
+      await fs.writeFile(mainPath, "import { core } from '@/core';\nexport const main = core;");
+      await fs.writeFile(corePath, 'export const core = 1;');
+
+      const analyses = await analyzer.analyzeDirectory(tempDir);
+      const callGraph = analyzer.buildCallGraph(analyses);
+
+      expect(callGraph[mainPath].calls).toContain(corePath);
+      expect(callGraph[corePath].calledBy).toContain(mainPath);
+    });
+
+    test('should resolve path aliases from extended tsconfig in call graph', async () => {
+      const configDir = path.join(tempDir, 'config');
+      await fs.mkdir(configDir, { recursive: true });
+      await fs.writeFile(
+        path.join(configDir, 'tsconfig.base.json'),
+        JSON.stringify({
+          compilerOptions: {
+            baseUrl: '..',
+            paths: {
+              '@/*': ['src/*']
+            }
+          }
+        }, null, 2)
+      );
+      await fs.writeFile(
+        path.join(tempDir, 'tsconfig.json'),
+        JSON.stringify({
+          extends: './config/tsconfig.base.json'
+        }, null, 2)
+      );
+
+      analyzer = new StaticAnalyzer(tempDir);
+      await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+      const mainPath = path.join(tempDir, 'src', 'main.ts');
+      const corePath = path.join(tempDir, 'src', 'core.ts');
+
+      await fs.writeFile(mainPath, "import { core } from '@/core';\nexport const main = core;");
+      await fs.writeFile(corePath, 'export const core = 1;');
+
+      const analyses = await analyzer.analyzeDirectory(tempDir);
+      const callGraph = analyzer.buildCallGraph(analyses);
+
+      expect(callGraph[mainPath].calls).toContain(corePath);
+      expect(callGraph[corePath].calledBy).toContain(mainPath);
     });
   });
 
@@ -286,6 +448,38 @@ func main() {
       expect(deadPaths).not.toContain('/repo/src/app.js');
       // maintenance/helper.js SHOULD be flagged (basename is "helper", not "main")
       expect(deadPaths).toContain('/repo/maintenance/helper.js');
+    });
+
+    test('should ignore test files in dead-code detection by default', () => {
+      const analyses = [
+        { path: '/repo/tests/example.test.js', exports: ['something'] },
+        { path: '/repo/src/feature.js', exports: ['feature'] }
+      ];
+      const callGraph = {
+        '/repo/tests/example.test.js': { calls: [], calledBy: [] },
+        '/repo/src/feature.js': { calls: [], calledBy: [] }
+      };
+
+      const deadCode = analyzer.detectDeadCode(analyses, callGraph);
+      const deadPaths = deadCode.map(d => d.path);
+
+      expect(deadPaths).not.toContain('/repo/tests/example.test.js');
+      expect(deadPaths).toContain('/repo/src/feature.js');
+    });
+
+    test('should include test files when includeTests option is enabled', () => {
+      const analyses = [
+        { path: '/repo/tests/example.test.js', exports: ['something'] }
+      ];
+      const callGraph = {
+        '/repo/tests/example.test.js': { calls: [], calledBy: [] }
+      };
+
+      const deadCode = analyzer.detectDeadCode(analyses, callGraph, {
+        includeTests: true
+      });
+
+      expect(deadCode.map(d => d.path)).toContain('/repo/tests/example.test.js');
     });
   });
 });

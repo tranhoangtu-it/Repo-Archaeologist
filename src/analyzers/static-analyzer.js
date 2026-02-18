@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
+const { isAstLanguage, extractAstData } = require('../utils/ast-extractor');
 
 class StaticAnalyzer {
   constructor(repoPath) {
@@ -41,6 +42,194 @@ class StaticAnalyzer {
         structPattern: /type\s+(\w+)\s+struct/g
       }
     };
+    this.pathResolutionConfig = this.loadPathResolutionConfig();
+  }
+
+  loadPathResolutionConfig() {
+    const candidates = ['tsconfig.json', 'jsconfig.json'];
+    const defaultConfig = {
+      baseUrl: null,
+      pathAliases: []
+    };
+
+    for (const candidate of candidates) {
+      const configPath = path.join(this.repoPath, candidate);
+      if (!fsSync.existsSync(configPath)) {
+        continue;
+      }
+
+      const configChain = this.getConfigChain(configPath);
+      if (configChain.length === 0) {
+        continue;
+      }
+
+      let baseUrl = this.repoPath;
+      const mergedPaths = {};
+
+      configChain.forEach(({ configPath: sourcePath, config }) => {
+        const compilerOptions = config.compilerOptions || {};
+        const configDir = path.dirname(sourcePath);
+
+        if (typeof compilerOptions.baseUrl === 'string') {
+          baseUrl = path.resolve(configDir, compilerOptions.baseUrl);
+        }
+
+        if (compilerOptions.paths && typeof compilerOptions.paths === 'object') {
+          Object.assign(mergedPaths, compilerOptions.paths);
+        }
+      });
+
+      return {
+        baseUrl,
+        pathAliases: this.parsePathAliases(mergedPaths, baseUrl)
+      };
+    }
+
+    return defaultConfig;
+  }
+
+  getConfigChain(configPath, visited = new Set()) {
+    const absoluteConfigPath = path.resolve(configPath);
+    if (visited.has(absoluteConfigPath)) {
+      return [];
+    }
+    visited.add(absoluteConfigPath);
+
+    const parsedConfig = this.readJsonConfig(absoluteConfigPath);
+    if (!parsedConfig) {
+      return [];
+    }
+
+    const chain = [];
+    const extendsEntries = this.getExtendsEntries(parsedConfig.extends);
+
+    extendsEntries.forEach((extendsValue) => {
+      const resolvedExtendsPath = this.resolveExtendedConfigPath(extendsValue, path.dirname(absoluteConfigPath));
+      if (resolvedExtendsPath) {
+        const parentChain = this.getConfigChain(resolvedExtendsPath, visited);
+        parentChain.forEach((item) => chain.push(item));
+      }
+    });
+
+    chain.push({
+      configPath: absoluteConfigPath,
+      config: parsedConfig
+    });
+
+    return chain;
+  }
+
+  getExtendsEntries(extendsValue) {
+    if (!extendsValue) return [];
+    if (typeof extendsValue === 'string') return [extendsValue];
+    if (Array.isArray(extendsValue)) {
+      return extendsValue.filter(value => typeof value === 'string');
+    }
+    return [];
+  }
+
+  resolveExtendedConfigPath(extendsValue, currentDir) {
+    if (typeof extendsValue !== 'string' || extendsValue.length === 0) {
+      return null;
+    }
+
+    if (extendsValue.startsWith('.') || extendsValue.startsWith('/')) {
+      return this.resolveConfigFilePath(path.resolve(currentDir, extendsValue));
+    }
+
+    const moduleCandidates = [extendsValue];
+    if (!extendsValue.endsWith('.json')) {
+      moduleCandidates.push(`${extendsValue}.json`);
+    }
+
+    for (const candidate of moduleCandidates) {
+      try {
+        const resolved = require.resolve(candidate, {
+          paths: [currentDir, this.repoPath]
+        });
+        const resolvedConfig = this.resolveConfigFilePath(resolved);
+        if (resolvedConfig) {
+          return resolvedConfig;
+        }
+      } catch (_error) {
+        // Try next candidate
+      }
+    }
+
+    return null;
+  }
+
+  resolveConfigFilePath(basePath) {
+    const candidatePaths = [
+      basePath,
+      `${basePath}.json`,
+      path.join(basePath, 'tsconfig.json'),
+      path.join(basePath, 'jsconfig.json')
+    ];
+
+    for (const candidate of candidatePaths) {
+      try {
+        if (fsSync.statSync(candidate).isFile()) {
+          return candidate;
+        }
+      } catch (_error) {
+        // Try next candidate
+      }
+    }
+
+    return null;
+  }
+
+  readJsonConfig(configPath) {
+    try {
+      const rawContent = fsSync.readFileSync(configPath, 'utf8');
+      const sanitized = rawContent
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '')
+        .replace(/,\s*([}\]])/g, '$1');
+      return JSON.parse(sanitized);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  parsePathAliases(paths, baseUrl) {
+    if (!paths || typeof paths !== 'object') {
+      return [];
+    }
+
+    const effectiveBaseUrl = baseUrl || this.repoPath;
+    return Object.entries(paths)
+      .map(([pattern, targets]) => {
+        if (!Array.isArray(targets) || targets.length === 0) {
+          return null;
+        }
+
+        const hasWildcard = pattern.endsWith('/*');
+        const prefix = hasWildcard ? pattern.slice(0, -2) : pattern;
+        const normalizedTargets = targets
+          .filter(target => typeof target === 'string' && target.length > 0)
+          .map(target => {
+            const targetHasWildcard = target.endsWith('/*');
+            const targetPrefix = targetHasWildcard ? target.slice(0, -2) : target;
+            return {
+              hasWildcard: targetHasWildcard,
+              prefix: path.resolve(effectiveBaseUrl, targetPrefix)
+            };
+          });
+
+        if (normalizedTargets.length === 0) {
+          return null;
+        }
+
+        return {
+          pattern,
+          prefix,
+          hasWildcard,
+          targets: normalizedTargets
+        };
+      })
+      .filter(Boolean);
   }
 
   async analyzeFile(filePath) {
@@ -54,15 +243,18 @@ class StaticAnalyzer {
       }
 
       const patterns = this.languagePatterns[language];
+      const extractedData = isAstLanguage(language)
+        ? (extractAstData(content, language) || this.extractRegexData(content, patterns))
+        : this.extractRegexData(content, patterns);
       const analysis = {
         path: filePath,
         language,
         size: content.length,
         lines: content.split('\n').length,
-        imports: this.extractMatches(content, patterns.importPattern),
-        functions: this.extractMatches(content, patterns.functionPattern),
-        classes: this.extractMatches(content, patterns.classPattern),
-        exports: this.extractMatches(content, patterns.exportPattern),
+        imports: extractedData.imports,
+        functions: extractedData.functions,
+        classes: extractedData.classes,
+        exports: extractedData.exports,
         complexity: this.calculateComplexity(content)
       };
 
@@ -75,16 +267,27 @@ class StaticAnalyzer {
       }
 
       if (patterns.interfacePattern) {
-        analysis.interfaces = this.extractMatches(content, patterns.interfacePattern);
+        analysis.interfaces = extractedData.interfaces || [];
       }
       if (patterns.structPattern) {
-        analysis.structs = this.extractMatches(content, patterns.structPattern);
+        analysis.structs = extractedData.structs || [];
       }
 
       return analysis;
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
+  }
+
+  extractRegexData(content, patterns) {
+    return {
+      imports: this.extractMatches(content, patterns.importPattern),
+      functions: this.extractMatches(content, patterns.functionPattern),
+      classes: this.extractMatches(content, patterns.classPattern),
+      exports: this.extractMatches(content, patterns.exportPattern),
+      interfaces: patterns.interfacePattern ? this.extractMatches(content, patterns.interfacePattern) : [],
+      structs: patterns.structPattern ? this.extractMatches(content, patterns.structPattern) : []
+    };
   }
 
   detectLanguage(extension) {
@@ -157,9 +360,22 @@ class StaticAnalyzer {
     const analyses = [];
     const self = this;
     const visitedDirs = new Set();
+    const rootDir = path.resolve(dirPath);
+    const normalizedPatterns = ignorePatterns
+      .map(pattern => pattern.replace(/\\/g, '/').replace(/^\.\/+/, '').replace(/\/+$/, '').toLowerCase())
+      .filter(Boolean);
 
-    function shouldIgnore(entryName) {
-      return ignorePatterns.some(pattern => entryName === pattern);
+    function shouldIgnore(entryName, fullPath) {
+      const normalizedEntryName = entryName.toLowerCase();
+      const relativePath = path.relative(rootDir, fullPath).replace(/\\/g, '/').toLowerCase();
+      const relativeParts = relativePath.split('/');
+
+      return normalizedPatterns.some(pattern => {
+        if (normalizedEntryName === pattern) return true;
+        if (relativePath === pattern) return true;
+        if (relativePath.startsWith(`${pattern}/`)) return true;
+        return relativeParts.includes(pattern);
+      });
     }
 
     async function walk(dir) {
@@ -176,9 +392,8 @@ class StaticAnalyzer {
       const entries = await fs.readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
-        if (shouldIgnore(entry.name)) continue;
-
         const fullPath = path.join(dir, entry.name);
+        if (shouldIgnore(entry.name, fullPath)) continue;
 
         if (entry.isDirectory() || entry.isSymbolicLink()) {
           // Check if symlink points to a directory
@@ -234,29 +449,128 @@ class StaticAnalyzer {
   }
 
   resolveImportPath(fromFile, importPath) {
-    if (importPath.startsWith('.')) {
-      const dir = path.dirname(fromFile);
-      const resolved = path.resolve(dir, importPath);
-      
-      const extensions = ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.go'];
-      for (const ext of extensions) {
-        const withExt = resolved + ext;
-        try {
-          fsSync.accessSync(withExt);
-          return withExt;
-        } catch (e) {
-          // File doesn't exist, try next extension
-        }
+    const candidates = this.getImportCandidates(fromFile, importPath);
+    for (const candidate of candidates) {
+      const resolved = this.resolveExistingPath(candidate);
+      if (resolved) {
+        return resolved;
       }
-      return resolved;
     }
+
     return null;
   }
 
-  detectDeadCode(analyses, callGraph) {
+  getImportCandidates(fromFile, importPath) {
+    if (!importPath || typeof importPath !== 'string') {
+      return [];
+    }
+
+    if (importPath.startsWith('.')) {
+      return [path.resolve(path.dirname(fromFile), importPath)];
+    }
+
+    const aliasCandidates = this.resolveAliasCandidates(importPath);
+    if (aliasCandidates.length > 0) {
+      return aliasCandidates;
+    }
+
+    const looksLikeProjectPath = importPath.includes('/') ||
+      importPath.startsWith('@') ||
+      importPath.startsWith('~') ||
+      Boolean(path.extname(importPath));
+
+    if (this.pathResolutionConfig.baseUrl && looksLikeProjectPath) {
+      return [path.resolve(this.pathResolutionConfig.baseUrl, importPath)];
+    }
+
+    return [];
+  }
+
+  resolveAliasCandidates(importPath) {
+    const { pathAliases } = this.pathResolutionConfig;
+    if (!Array.isArray(pathAliases) || pathAliases.length === 0) {
+      return [];
+    }
+
+    const candidates = [];
+
+    pathAliases.forEach((alias) => {
+      if (alias.hasWildcard) {
+        if (!importPath.startsWith(alias.prefix)) {
+          return;
+        }
+
+        const suffix = importPath.slice(alias.prefix.length);
+        alias.targets.forEach((target) => {
+          const targetRelative = target.hasWildcard
+            ? `${target.prefix}${suffix}`
+            : target.prefix;
+          candidates.push(targetRelative);
+        });
+        return;
+      }
+
+      if (importPath === alias.pattern) {
+        alias.targets.forEach((target) => {
+          candidates.push(target.prefix);
+        });
+      }
+    });
+
+    return candidates;
+  }
+
+  resolveExistingPath(basePath) {
+    if (!basePath) return null;
+
+    const candidates = this.expandPathCandidates(basePath);
+
+    for (const candidate of candidates) {
+      if (this.fileExists(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  expandPathCandidates(basePath) {
+    const importExtensions = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.py', '.java', '.go'];
+    const candidates = new Set();
+    const normalizedBase = path.normalize(basePath);
+
+    candidates.add(normalizedBase);
+
+    if (!path.extname(normalizedBase)) {
+      importExtensions.forEach((ext) => {
+        candidates.add(`${normalizedBase}${ext}`);
+      });
+    }
+
+    importExtensions.forEach((ext) => {
+      candidates.add(path.join(normalizedBase, `index${ext}`));
+    });
+
+    return Array.from(candidates);
+  }
+
+  fileExists(filePath) {
+    try {
+      return fsSync.statSync(filePath).isFile();
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  detectDeadCode(analyses, callGraph, options = {}) {
+    const includeTests = Boolean(options.includeTests);
     const deadFiles = [];
     
     analyses.forEach(analysis => {
+      if (!includeTests && this.isTestFile(analysis.path)) {
+        return;
+      }
+
       const graph = callGraph[analysis.path];
       
       if (!graph) return;
@@ -279,6 +593,12 @@ class StaticAnalyzer {
     });
     
     return deadFiles;
+  }
+
+  isTestFile(filePath) {
+    const normalizedPath = filePath.toLowerCase();
+    return /(^|[\\/])(__tests__|tests?)([\\/]|$)/.test(normalizedPath) ||
+      /\.(test|spec)\.[^./\\]+$/.test(normalizedPath);
   }
 }
 

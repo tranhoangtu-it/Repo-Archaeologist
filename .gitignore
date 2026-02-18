@@ -3,6 +3,7 @@ dist/
 *.log
 .DS_Store
 coverage/
+.nyc_output/
 .env
 .vscode/
 .idea/
@@ -10,8 +11,14 @@ coverage/
 *.swo
 *~
 tmp/
+.eslintcache
+*.tgz
 analysis-output.txt
 architecture-map.md
 ONBOARDING.md
 risk-report.md
+analysis.json
+architecture.md
+onboarding.md
+report.md
 plans/

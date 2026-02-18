@@ -47,6 +47,18 @@ describe('RepositoryAnalyzer', () => {
       expect(result.totalFiles).toBe(0);
       expect(result.files).toHaveLength(0);
     });
+
+    test('should skip co-change analysis when includeCoChange is false', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.js'), 'const a = 1;');
+      await fs.writeFile(path.join(tempDir, 'b.js'), 'const b = 1;');
+      await simpleGit(tempDir).add('.').commit('Initial commit');
+
+      const coChangeSpy = jest.spyOn(analyzer.gitAnalyzer, 'getFilesChangedTogether');
+      const result = await analyzer.analyze({ includeCoChange: false });
+
+      expect(coChangeSpy).not.toHaveBeenCalled();
+      expect(result.files.every(file => Array.isArray(file.coChangedFiles) && file.coChangedFiles.length === 0)).toBe(true);
+    });
   });
 
   describe('aggregateLanguages', () => {
@@ -130,6 +142,21 @@ describe('RepositoryAnalyzer', () => {
       const featureNames = features.map(f => f.name);
       // Features should be identified from path structure
       expect(featureNames.length).toBeGreaterThan(0);
+    });
+
+    test('should avoid empty feature names from absolute paths', () => {
+      const files = [
+        { path: path.join(tempDir, 'src/commands/analyze.js') },
+        { path: path.join(tempDir, 'src/analyzers/repository-analyzer.js') },
+        { path: path.join(tempDir, 'tests/analyzers.test.js') }
+      ];
+
+      const features = analyzer.identifyFeatures(files);
+      const featureNames = features.map(f => f.name);
+
+      expect(featureNames).not.toContain('');
+      expect(featureNames).toContain('commands');
+      expect(featureNames).toContain('analyzers');
     });
   });
 });

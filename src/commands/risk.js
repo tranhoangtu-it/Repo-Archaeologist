@@ -1,16 +1,17 @@
 const { RepositoryAnalyzer } = require('../analyzers/repository-analyzer');
 const fs = require('fs').promises;
-const chalk = require('chalk');
-const ora = require('ora');
 const Table = require('cli-table3');
 const path = require('path');
+const { loadCliDeps } = require('../utils/cli-deps');
+const { getAnalyzerOptions } = require('../utils/analyzer-options');
 
 async function risk(repoPath, options) {
+  const { chalk, ora } = await loadCliDeps();
   const spinner = ora('Calculating refactor risk scores...').start();
   
   try {
     const analyzer = new RepositoryAnalyzer(repoPath);
-    const analysis = await analyzer.analyze();
+    const analysis = await analyzer.analyze(getAnalyzerOptions(options));
     
     const filesWithRisk = analysis.files.map(file => ({
       ...file,
@@ -24,7 +25,7 @@ async function risk(repoPath, options) {
     
     spinner.succeed('Risk calculation complete!');
     
-    displayRiskReport(highRiskFiles, analysis.repository, threshold);
+    displayRiskReport(highRiskFiles, analysis.repository, threshold, chalk);
     
     if (options.output) {
       const report = generateRiskReport(highRiskFiles, analysis.repository, threshold);
@@ -38,7 +39,7 @@ async function risk(repoPath, options) {
   }
 }
 
-function displayRiskReport(highRiskFiles, repoPath, threshold) {
+function displayRiskReport(highRiskFiles, repoPath, threshold, chalk) {
   console.log('\n' + chalk.bold.blue('=== Refactor Risk Report ==='));
   console.log(chalk.gray(`Repository: ${repoPath}`));
   console.log(chalk.gray(`Threshold: ${threshold}`));
@@ -64,8 +65,8 @@ function displayRiskReport(highRiskFiles, repoPath, threshold) {
     const deps = file.callGraphInfo?.calledBy?.length || 0;
     
     const riskColor = file.riskScore >= 10 ? chalk.red : 
-                     file.riskScore >= 7 ? chalk.yellow : 
-                     chalk.white;
+      file.riskScore >= 7 ? chalk.yellow : 
+        chalk.white;
     
     table.push([
       i + 1,
@@ -109,25 +110,25 @@ function displayRiskReport(highRiskFiles, repoPath, threshold) {
 }
 
 function generateRiskReport(highRiskFiles, repoPath, threshold) {
-  let report = `# Refactor Risk Report\n\n`;
+  let report = '# Refactor Risk Report\n\n';
   report += `**Repository:** ${repoPath}\n`;
   report += `**Threshold:** ${threshold}\n`;
   report += `**Generated:** ${new Date().toISOString()}\n\n`;
   
   if (highRiskFiles.length === 0) {
-    report += `No high-risk files found!\n`;
+    report += 'No high-risk files found!\n';
     return report;
   }
   
-  report += `## Summary\n\n`;
+  report += '## Summary\n\n';
   report += `Found ${highRiskFiles.length} high-risk files.\n\n`;
   
   const avgRisk = (highRiskFiles.reduce((sum, f) => sum + f.riskScore, 0) / highRiskFiles.length).toFixed(1);
   report += `Average Risk Score: ${avgRisk}\n\n`;
   
-  report += `## High-Risk Files\n\n`;
-  report += `| Rank | File | Risk Score | Lines | Complexity | Dependencies |\n`;
-  report += `|------|------|------------|-------|------------|-------------|\n`;
+  report += '## High-Risk Files\n\n';
+  report += '| Rank | File | Risk Score | Lines | Complexity | Dependencies |\n';
+  report += '|------|------|------------|-------|------------|-------------|\n';
   
   highRiskFiles.forEach((file, i) => {
     const relPath = path.relative(repoPath, file.path);
@@ -135,14 +136,14 @@ function generateRiskReport(highRiskFiles, repoPath, threshold) {
     report += `| ${i + 1} | ${relPath} | ${file.riskScore} | ${file.lines} | ${file.complexity} | ${deps} |\n`;
   });
   
-  report += `\n## Risk Score Factors\n\n`;
-  report += `- **Complexity:** High cyclomatic complexity increases risk\n`;
-  report += `- **Size:** Larger files are harder to refactor\n`;
-  report += `- **Change Frequency:** Files that change often are riskier\n`;
-  report += `- **Contributors:** Multiple contributors indicate complexity\n`;
-  report += `- **Dependencies:** Files with many dependents are critical\n\n`;
+  report += '\n## Risk Score Factors\n\n';
+  report += '- **Complexity:** High cyclomatic complexity increases risk\n';
+  report += '- **Size:** Larger files are harder to refactor\n';
+  report += '- **Change Frequency:** Files that change often are riskier\n';
+  report += '- **Contributors:** Multiple contributors indicate complexity\n';
+  report += '- **Dependencies:** Files with many dependents are critical\n\n';
   
-  report += `## Recommendations\n\n`;
+  report += '## Recommendations\n\n';
   const criticalFiles = highRiskFiles.filter(f => f.riskScore >= 10);
   if (criticalFiles.length > 0) {
     report += `⚠️ **${criticalFiles.length} critical files** need immediate attention:\n\n`;
@@ -150,18 +151,18 @@ function generateRiskReport(highRiskFiles, repoPath, threshold) {
       const relPath = path.relative(repoPath, file.path);
       report += `- ${relPath} (Score: ${file.riskScore})\n`;
     });
-    report += `\n`;
+    report += '\n';
   }
   
-  report += `### General Recommendations\n\n`;
-  report += `1. Start by breaking down large files\n`;
-  report += `2. Add tests before refactoring critical files\n`;
-  report += `3. Document complex logic\n`;
-  report += `4. Consider extracting reusable components\n`;
-  report += `5. Review files with high change frequency for stability issues\n\n`;
+  report += '### General Recommendations\n\n';
+  report += '1. Start by breaking down large files\n';
+  report += '2. Add tests before refactoring critical files\n';
+  report += '3. Document complex logic\n';
+  report += '4. Consider extracting reusable components\n';
+  report += '5. Review files with high change frequency for stability issues\n\n';
   
-  report += `---\n\n`;
-  report += `*This report was automatically generated by Repo Archaeologist.*\n`;
+  report += '---\n\n';
+  report += '*This report was automatically generated by Repo Archaeologist.*\n';
   
   return report;
 }

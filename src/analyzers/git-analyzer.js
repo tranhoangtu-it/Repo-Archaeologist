@@ -6,7 +6,115 @@ class GitAnalyzer {
     this.repoPath = repoPath;
     this.git = simpleGit(repoPath);
     this._commitFileCache = new Map();
+    this._fileHistoryCache = new Map();
+    this._repoIndexPromise = null;
     this._isRepoChecked = false;
+  }
+
+  _normalizeFilePath(filePath) {
+    if (typeof filePath !== 'string') {
+      return '';
+    }
+
+    const trimmed = filePath.trim();
+    if (trimmed.length === 0) {
+      return '';
+    }
+
+    const absolutePath = path.isAbsolute(trimmed)
+      ? path.normalize(trimmed)
+      : path.resolve(this.repoPath, trimmed);
+    const relativePath = path.relative(this.repoPath, absolutePath);
+
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      return '';
+    }
+
+    return relativePath.replace(/\\/g, '/');
+  }
+
+  _parseRepositoryLog(rawLog) {
+    const commits = [];
+    const commitFilesMap = new Map();
+    const fileCommitsMap = new Map();
+    let currentCommit = null;
+
+    rawLog.split('\n').forEach((line) => {
+      if (!line) {
+        return;
+      }
+
+      const headerParts = line.split('\t');
+      if (headerParts.length >= 4 && /^[0-9a-f]{7,40}$/i.test(headerParts[0])) {
+        const [hash, authorName, date, ...messageParts] = headerParts;
+        currentCommit = {
+          hash,
+          author_name: authorName,
+          date,
+          message: messageParts.join('\t')
+        };
+        commits.push(currentCommit);
+        commitFilesMap.set(hash, []);
+        return;
+      }
+
+      if (!currentCommit) {
+        return;
+      }
+
+      const normalizedFile = line.trim().replace(/\\/g, '/');
+      if (!normalizedFile) {
+        return;
+      }
+
+      const commitFiles = commitFilesMap.get(currentCommit.hash) || [];
+      if (!commitFiles.includes(normalizedFile)) {
+        commitFiles.push(normalizedFile);
+        commitFilesMap.set(currentCommit.hash, commitFiles);
+      }
+
+      if (!fileCommitsMap.has(normalizedFile)) {
+        fileCommitsMap.set(normalizedFile, []);
+      }
+      fileCommitsMap.get(normalizedFile).push(currentCommit);
+    });
+
+    return {
+      commits,
+      commitFilesMap,
+      fileCommitsMap
+    };
+  }
+
+  async _getRepositoryIndex() {
+    if (this._repoIndexPromise) {
+      return this._repoIndexPromise;
+    }
+
+    this._repoIndexPromise = (async () => {
+      await this.checkIsRepo();
+      const rawLog = await this.git.raw([
+        'log',
+        '--name-only',
+        '--date=iso-strict',
+        '--pretty=format:%H%x09%an%x09%aI%x09%s'
+      ]);
+      const repositoryIndex = this._parseRepositoryLog(rawLog);
+
+      repositoryIndex.commitFilesMap.forEach((files, hash) => {
+        this._commitFileCache.set(hash, files);
+      });
+      repositoryIndex.fileCommitsMap.forEach((commits, filePath) => {
+        this._fileHistoryCache.set(filePath, commits);
+      });
+
+      return repositoryIndex;
+    })().catch((error) => {
+      this._repoIndexPromise = null;
+      throw error;
+    });
+
+    return this._repoIndexPromise;
   }
 
   async checkIsRepo() {
@@ -31,20 +139,37 @@ class GitAnalyzer {
   async getFileHistory(filePath) {
     try {
       await this.checkIsRepo();
-      const log = await this.git.log({ file: filePath });
-      return log.all;
-    } catch (error) {
+      const normalizedPath = this._normalizeFilePath(filePath);
+      if (!normalizedPath) {
+        return [];
+      }
+
+      if (this._fileHistoryCache.has(normalizedPath)) {
+        return this._fileHistoryCache.get(normalizedPath);
+      }
+
+      let history = [];
+      try {
+        const repositoryIndex = await this._getRepositoryIndex();
+        history = repositoryIndex.fileCommitsMap.get(normalizedPath) || [];
+      } catch {
+        const log = await this.git.log({ file: normalizedPath });
+        history = log.all;
+      }
+
+      this._fileHistoryCache.set(normalizedPath, history);
+      return history;
+    } catch (_error) {
       return [];
     }
   }
 
   async getFileOwnership(filePath) {
     try {
-      await this.checkIsRepo();
-      const log = await this.git.log({ file: filePath });
+      const commits = await this.getFileHistory(filePath);
       const authorCounts = {};
-      
-      log.all.forEach(commit => {
+
+      commits.forEach(commit => {
         const author = commit.author_name;
         authorCounts[author] = (authorCounts[author] || 0) + 1;
       });
@@ -56,9 +181,9 @@ class GitAnalyzer {
       return {
         primary: sortedAuthors[0]?.author || 'Unknown',
         contributors: sortedAuthors,
-        totalCommits: log.all.length
+        totalCommits: commits.length
       };
-    } catch (error) {
+    } catch (_error) {
       return {
         primary: 'Unknown',
         contributors: [],
@@ -69,14 +194,18 @@ class GitAnalyzer {
 
   async getRecentlyModifiedFiles(daysAgo = 90) {
     try {
-      await this.checkIsRepo();
-      const since = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
-      const log = await this.git.log({ '--since': since });
+      const repositoryIndex = await this._getRepositoryIndex();
+      const sinceMs = Date.now() - daysAgo * 24 * 60 * 60 * 1000;
 
       const fileModifications = {};
-      for (const commit of log.all) {
-        const files = await this._getCommitFiles(commit.hash);
-        
+      for (const commit of repositoryIndex.commits) {
+        const commitMs = Date.parse(commit.date);
+        if (!Number.isNaN(commitMs) && commitMs < sinceMs) {
+          continue;
+        }
+
+        const files = repositoryIndex.commitFilesMap.get(commit.hash) || [];
+
         files.forEach(file => {
           if (!fileModifications[file]) {
             fileModifications[file] = [];
@@ -91,16 +220,14 @@ class GitAnalyzer {
       }
       
       return fileModifications;
-    } catch (error) {
+    } catch (_error) {
       return {};
     }
   }
 
   async getChangeFrequency(filePath) {
     try {
-      await this.checkIsRepo();
-      const log = await this.git.log({ file: filePath });
-      const commits = log.all;
+      const commits = await this.getFileHistory(filePath);
       
       if (commits.length < 2) {
         return 0;
@@ -111,21 +238,30 @@ class GitAnalyzer {
       const daysDiff = (lastCommit - firstCommit) / (1000 * 60 * 60 * 24);
       
       return daysDiff > 0 ? commits.length / daysDiff : 0;
-    } catch (error) {
+    } catch (_error) {
       return 0;
     }
   }
 
   async getFilesChangedTogether(filePath, threshold = 0.3) {
     try {
-      await this.checkIsRepo();
-      const fileLog = await this.git.log({ file: filePath });
-      const fileCommits = new Set(fileLog.all.map(c => c.hash));
+      const normalizedPath = this._normalizeFilePath(filePath);
+      if (!normalizedPath) {
+        return [];
+      }
+
+      const repositoryIndex = await this._getRepositoryIndex();
+      const fileHistory = await this.getFileHistory(normalizedPath);
+      const fileCommits = new Set(fileHistory.map(c => c.hash));
+      if (fileCommits.size === 0) {
+        return [];
+      }
 
       const coChangedFiles = {};
 
       for (const hash of fileCommits) {
-        const files = (await this._getCommitFiles(hash)).filter(f => f !== filePath);
+        const files = (repositoryIndex.commitFilesMap.get(hash) || [])
+          .filter(file => file !== normalizedPath);
         
         files.forEach(file => {
           coChangedFiles[file] = (coChangedFiles[file] || 0) + 1;
@@ -134,16 +270,16 @@ class GitAnalyzer {
 
       const totalCommits = fileCommits.size;
       const relatedFiles = Object.entries(coChangedFiles)
-        .filter(([_, count]) => count / totalCommits >= threshold)
-        .map(([file, count]) => ({ 
-          file, 
-          count, 
+        .filter(([, count]) => count / totalCommits >= threshold)
+        .map(([file, count]) => ({
+          file,
+          count,
           correlation: count / totalCommits 
         }))
         .sort((a, b) => b.correlation - a.correlation);
 
       return relatedFiles;
-    } catch (error) {
+    } catch (_error) {
       return [];
     }
   }
@@ -153,7 +289,7 @@ class GitAnalyzer {
       await this.checkIsRepo();
       const files = await this.git.raw(['ls-files']);
       return files.split('\n').filter(f => f.trim());
-    } catch (error) {
+    } catch (_error) {
       return [];
     }
   }

@@ -6,6 +6,12 @@
   "bin": {
     "repo-archaeologist": "./bin/cli.js"
   },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node bin/cli.js",
     "test": "jest",
@@ -23,17 +29,18 @@
   "author": "Trần Hoàng Tú",
   "license": "MIT",
   "dependencies": {
-    "commander": "^11.1.0",
-    "simple-git": "^3.22.0",
-    "chalk": "^4.1.2",
-    "ora": "^5.4.1",
-    "cli-table3": "^0.6.3"
+    "@babel/parser": "^7.29.0",
+    "commander": "^14.0.3",
+    "simple-git": "^3.31.1",
+    "chalk": "^5.6.2",
+    "ora": "^9.3.0",
+    "cli-table3": "^0.6.5"
   },
   "devDependencies": {
-    "jest": "^29.7.0",
-    "eslint": "^8.56.0"
+    "jest": "^30.2.0",
+    "eslint": "^10.0.0"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=20.19.0"
   }
 }

@@ -18,6 +18,9 @@ program
   .argument('[path]', 'Path to repository', '.')
   .option('-o, --output <file>', 'Output file for analysis results')
   .option('--format <type>', 'Output format (json, text)', 'text')
+  .option('--ignore <patterns>', 'Comma-separated additional paths to ignore during analysis')
+  .option('--include-tests', 'Include test files in dead-code detection')
+  .option('--skip-cochange', 'Skip co-change analysis to speed up large repositories')
   .action(analyze);
 
 program
@@ -26,6 +29,9 @@ program
   .argument('[path]', 'Path to repository', '.')
   .option('-o, --output <file>', 'Output file for architecture map')
   .option('--format <type>', 'Output format (json, markdown)', 'markdown')
+  .option('--ignore <patterns>', 'Comma-separated additional paths to ignore during analysis')
+  .option('--include-tests', 'Include test files in dead-code detection')
+  .option('--skip-cochange', 'Skip co-change analysis to speed up large repositories')
   .action(map);
 
 program
@@ -33,6 +39,9 @@ program
   .description('Generate onboarding report')
   .argument('[path]', 'Path to repository', '.')
   .option('-o, --output <file>', 'Output file for onboarding report')
+  .option('--ignore <patterns>', 'Comma-separated additional paths to ignore during analysis')
+  .option('--include-tests', 'Include test files in dead-code detection')
+  .option('--skip-cochange', 'Skip co-change analysis to speed up large repositories')
   .action(onboard);
 
 program
@@ -41,6 +50,9 @@ program
   .argument('[path]', 'Path to repository', '.')
   .option('-o, --output <file>', 'Output file for risk scores')
   .option('--threshold <number>', 'Minimum risk score to display', '5')
+  .option('--ignore <patterns>', 'Comma-separated additional paths to ignore during analysis')
+  .option('--include-tests', 'Include test files in dead-code detection')
+  .option('--skip-cochange', 'Skip co-change analysis to speed up large repositories')
   .action(risk);
 
 program.parse(process.argv);

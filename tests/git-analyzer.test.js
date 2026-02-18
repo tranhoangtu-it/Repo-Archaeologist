@@ -70,6 +70,25 @@ describe('GitAnalyzer', () => {
       expect(history).toEqual([]);
       await fs.rm(nonGitDir, { recursive: true, force: true });
     });
+
+    test('should build repository index once for multiple file lookups', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.js'), 'a1');
+      await fs.writeFile(path.join(tempDir, 'b.js'), 'b1');
+      await git.add('.').commit('first');
+      await fs.writeFile(path.join(tempDir, 'a.js'), 'a2');
+      await git.add('.').commit('second');
+
+      const rawSpy = jest.spyOn(analyzer.git, 'raw');
+
+      await analyzer.getFileHistory('a.js');
+      await analyzer.getFileHistory('b.js');
+
+      const indexCalls = rawSpy.mock.calls.filter((call) => {
+        const [args] = call;
+        return Array.isArray(args) && args[0] === 'log' && args.includes('--name-only');
+      });
+      expect(indexCalls).toHaveLength(1);
+    });
   });
 
   describe('getFileOwnership', () => {
@@ -132,6 +151,26 @@ describe('GitAnalyzer', () => {
       const freq = await analyzer.getChangeFrequency('nonexistent.js');
       expect(freq).toBe(0);
     });
+
+    test('should reuse cached history between ownership and frequency lookups', async () => {
+      await fs.writeFile(path.join(tempDir, 'file.js'), 'v1');
+      await git.add('.').commit('first');
+      await fs.writeFile(path.join(tempDir, 'file.js'), 'v2');
+      await git.add('.').commit('second');
+
+      const logSpy = jest.spyOn(analyzer.git, 'log');
+      const rawSpy = jest.spyOn(analyzer.git, 'raw');
+
+      await analyzer.getFileOwnership('file.js');
+      await analyzer.getChangeFrequency('file.js');
+
+      expect(logSpy).toHaveBeenCalledTimes(0);
+      const indexCalls = rawSpy.mock.calls.filter((call) => {
+        const [args] = call;
+        return Array.isArray(args) && args[0] === 'log' && args.includes('--name-only');
+      });
+      expect(indexCalls).toHaveLength(1);
+    });
   });
 
   describe('getFilesChangedTogether', () => {
@@ -181,6 +220,24 @@ describe('GitAnalyzer', () => {
       const result = await analyzer.getFilesChangedTogether('a.js', 0.6);
       const bFile = result.find(r => r.file === 'b.js');
       expect(bFile).toBeUndefined();
+    });
+
+    test('should exclude the target file when input path is absolute', async () => {
+      const aPath = path.join(tempDir, 'a.js');
+      const bPath = path.join(tempDir, 'b.js');
+      await fs.writeFile(aPath, 'a1');
+      await fs.writeFile(bPath, 'b1');
+      await git.add('.').commit('commit1');
+      await fs.writeFile(aPath, 'a2');
+      await fs.writeFile(bPath, 'b2');
+      await git.add('.').commit('commit2');
+
+      const result = await analyzer.getFilesChangedTogether(aPath);
+      const files = result.map(entry => entry.file);
+
+      expect(files).toContain('b.js');
+      expect(files).not.toContain('a.js');
+      expect(files).not.toContain(aPath);
     });
   });
 

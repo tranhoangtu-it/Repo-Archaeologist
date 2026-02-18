@@ -1,14 +1,15 @@
 const { RepositoryAnalyzer } = require('../analyzers/repository-analyzer');
 const fs = require('fs').promises;
-const chalk = require('chalk');
-const ora = require('ora');
+const { loadCliDeps } = require('../utils/cli-deps');
+const { getAnalyzerOptions } = require('../utils/analyzer-options');
 
 async function analyze(repoPath, options) {
+  const { chalk, ora } = await loadCliDeps();
   const spinner = ora('Analyzing repository...').start();
   
   try {
     const analyzer = new RepositoryAnalyzer(repoPath);
-    const analysis = await analyzer.analyze();
+    const analysis = await analyzer.analyze(getAnalyzerOptions(options));
     
     spinner.succeed('Analysis complete!');
     
@@ -21,7 +22,7 @@ async function analyze(repoPath, options) {
         console.log(output);
       }
     } else {
-      displayTextAnalysis(analysis);
+      displayTextAnalysis(analysis, chalk);
       if (options.output) {
         const textOutput = formatTextAnalysis(analysis);
         await fs.writeFile(options.output, textOutput);
@@ -35,7 +36,7 @@ async function analyze(repoPath, options) {
   }
 }
 
-function displayTextAnalysis(analysis) {
+function displayTextAnalysis(analysis, chalk) {
   console.log('\n' + chalk.bold.blue('=== Repository Analysis ==='));
   console.log(chalk.gray(`Repository: ${analysis.repository}`));
   console.log(chalk.gray(`Analyzed at: ${analysis.analyzedAt}`));

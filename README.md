@@ -38,6 +38,11 @@ A powerful CLI tool that reconstructs a repository's living architecture using s
 
 ## Installation
 
+### Requirements
+
+- Node.js 20.19+ (or 22.13+ / 24+)
+- Git (for repository history analysis)
+
 ```bash
 npm install -g repo-archaeologist
 ```
@@ -50,6 +55,16 @@ npm install repo-archaeologist
 
 ## Usage
 
+### Common Analysis Options
+
+- `--ignore <patterns>`: Comma-separated additional paths to ignore during analysis
+- `--include-tests`: Include test files in dead-code detection (disabled by default)
+- `--skip-cochange`: Skip co-change analysis to speed up large repositories
+
+### Performance Tip
+
+For very large repositories, use `--skip-cochange` to skip co-change correlation analysis and reduce execution time.
+
 ### Analyze Repository
 
 Get a comprehensive analysis of your repository:
@@ -61,10 +76,18 @@ repo-archaeologist analyze [path]
 Options:
 - `-o, --output <file>`: Save results to a file
 - `--format <type>`: Output format (json, text) - default: text
+- `--ignore <patterns>`: Comma-separated additional paths to ignore during analysis
+- `--include-tests`: Include test files in dead-code detection
+- `--skip-cochange`: Skip co-change analysis to speed up large repositories
 
 Example:
 ```bash
 repo-archaeologist analyze ./my-project --format json -o analysis.json
+```
+
+Fast mode example:
+```bash
+repo-archaeologist analyze ./my-project --skip-cochange
 ```
 
 ### Generate Architecture Map
@@ -78,6 +101,9 @@ repo-archaeologist map [path]
 Options:
 - `-o, --output <file>`: Save map to a file
 - `--format <type>`: Output format (json, markdown) - default: markdown
+- `--ignore <patterns>`: Comma-separated additional paths to ignore during analysis
+- `--include-tests`: Include test files in dead-code detection
+- `--skip-cochange`: Skip co-change analysis to speed up large repositories
 
 Example:
 ```bash
@@ -94,6 +120,9 @@ repo-archaeologist onboard [path]
 
 Options:
 - `-o, --output <file>`: Save report to a file
+- `--ignore <patterns>`: Comma-separated additional paths to ignore during analysis
+- `--include-tests`: Include test files in dead-code detection
+- `--skip-cochange`: Skip co-change analysis to speed up large repositories
 
 Example:
 ```bash
@@ -111,6 +140,9 @@ repo-archaeologist risk [path]
 Options:
 - `-o, --output <file>`: Save risk report to a file
 - `--threshold <number>`: Minimum risk score to display (default: 5)
+- `--ignore <patterns>`: Comma-separated additional paths to ignore during analysis
+- `--include-tests`: Include test files in dead-code detection
+- `--skip-cochange`: Skip co-change analysis to speed up large repositories
 
 Example:
 ```bash
@@ -124,6 +156,18 @@ Repo Archaeologist combines three powerful techniques:
 1. **Static Analysis**: Parses source code to understand structure, imports, exports, and complexity
 2. **Call Graph Construction**: Maps dependencies between files to identify core components
 3. **Git History Mining**: Analyzes commit history to understand ownership, change patterns, and file relationships
+
+For JavaScript/TypeScript projects, import/export extraction now uses AST parsing (with regex fallback), including support for:
+- `require(...)` and `import(...)`
+- `module.exports` / `exports.*`
+- `tsconfig.json` / `jsconfig.json` path aliases (`baseUrl`, `paths`, and `extends`)
+- directory `index.*` import resolution for local modules
+
+## Development
+
+- Use Node.js `20.19+` (or `22.13+` / `24+`), matching CI.
+- Run lint: `npm run lint`
+- Run tests: `npm test -- --runInBand`
 
 The tool outputs actionable insights including:
 - What each file does and how it fits into the architecture

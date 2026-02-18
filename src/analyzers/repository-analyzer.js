@@ -3,6 +3,18 @@ const { StaticAnalyzer } = require('./static-analyzer');
 const path = require('path');
 
 const GIT_CONCURRENCY_LIMIT = 5;
+const IGNORED_FEATURE_SEGMENTS = new Set([
+  'src',
+  'lib',
+  'app',
+  'components',
+  'utils',
+  'helpers',
+  'test',
+  'tests',
+  '__tests__',
+  'bin'
+]);
 
 class RepositoryAnalyzer {
   constructor(repoPath) {
@@ -11,17 +23,25 @@ class RepositoryAnalyzer {
     this.staticAnalyzer = new StaticAnalyzer(this.repoPath);
   }
 
-  async analyze() {
-    const staticAnalysis = await this.staticAnalyzer.analyzeDirectory(this.repoPath);
+  async analyze(options = {}) {
+    const includeCoChange = options.includeCoChange !== false;
+    const staticAnalysis = await this.staticAnalyzer.analyzeDirectory(
+      this.repoPath,
+      options.ignorePatterns
+    );
     const callGraph = this.staticAnalyzer.buildCallGraph(staticAnalysis);
-    const deadCode = this.staticAnalyzer.detectDeadCode(staticAnalysis, callGraph);
+    const deadCode = this.staticAnalyzer.detectDeadCode(staticAnalysis, callGraph, {
+      includeTests: options.includeTestsInDeadCode
+    });
 
     const filesWithGitInfo = await this._processWithConcurrency(
       staticAnalysis,
       async (fileAnalysis) => {
         const ownership = await this.gitAnalyzer.getFileOwnership(fileAnalysis.path);
         const changeFrequency = await this.gitAnalyzer.getChangeFrequency(fileAnalysis.path);
-        const coChangedFiles = await this.gitAnalyzer.getFilesChangedTogether(fileAnalysis.path);
+        const coChangedFiles = includeCoChange
+          ? await this.gitAnalyzer.getFilesChangedTogether(fileAnalysis.path)
+          : [];
 
         return {
           ...fileAnalysis,
@@ -170,10 +190,15 @@ class RepositoryAnalyzer {
     const features = new Map();
     
     files.forEach(file => {
-      const pathParts = file.path.split(path.sep);
-      
-      const featureIndicators = pathParts.filter(part => 
-        !['src', 'lib', 'app', 'components', 'utils', 'test'].includes(part.toLowerCase())
+      const relativePath = path.relative(this.repoPath, file.path);
+      if (!relativePath || relativePath.startsWith('..')) {
+        return;
+      }
+
+      const pathParts = relativePath.split(path.sep).filter(Boolean);
+      const dirParts = pathParts.slice(0, -1);
+      const featureIndicators = dirParts.filter(part =>
+        !IGNORED_FEATURE_SEGMENTS.has(part.toLowerCase())
       );
 
       if (featureIndicators.length > 0) {

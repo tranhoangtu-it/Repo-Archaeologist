@@ -1,15 +1,16 @@
 const { RepositoryAnalyzer } = require('../analyzers/repository-analyzer');
 const fs = require('fs').promises;
-const chalk = require('chalk');
-const ora = require('ora');
 const path = require('path');
+const { loadCliDeps } = require('../utils/cli-deps');
+const { getAnalyzerOptions } = require('../utils/analyzer-options');
 
 async function map(repoPath, options) {
+  const { chalk, ora } = await loadCliDeps();
   const spinner = ora('Generating architecture map...').start();
   
   try {
     const analyzer = new RepositoryAnalyzer(repoPath);
-    const analysis = await analyzer.analyze();
+    const analysis = await analyzer.analyze(getAnalyzerOptions(options));
     const categories = analyzer.categorizeFiles(analysis.files);
     const features = analyzer.identifyFeatures(analysis.files);
     
@@ -48,16 +49,16 @@ async function map(repoPath, options) {
 }
 
 function generateMarkdownMap(mapData, analysis) {
-  let markdown = `# Architecture Map\n\n`;
+  let markdown = '# Architecture Map\n\n';
   markdown += `**Repository:** ${mapData.repository}\n`;
   markdown += `**Generated:** ${mapData.generatedAt}\n\n`;
   
-  markdown += `## Overview\n\n`;
+  markdown += '## Overview\n\n';
   markdown += `- **Total Files:** ${analysis.totalFiles}\n`;
   markdown += `- **Languages:** ${Object.keys(analysis.languages).join(', ')}\n`;
   markdown += `- **Dead Code Files:** ${analysis.deadCode.length}\n\n`;
   
-  markdown += `## File Categories\n\n`;
+  markdown += '## File Categories\n\n';
   
   if (mapData.categories.entryPoints.length > 0) {
     markdown += `### Entry Points (${mapData.categories.entryPoints.length})\n\n`;
@@ -68,12 +69,12 @@ function generateMarkdownMap(mapData, analysis) {
       markdown += `  - Lines: ${file.lines}\n`;
       markdown += `  - Owner: ${file.ownership?.primary || 'Unknown'}\n`;
     });
-    markdown += `\n`;
+    markdown += '\n';
   }
   
   if (mapData.categories.core.length > 0) {
     markdown += `### Core Files (${mapData.categories.core.length})\n\n`;
-    markdown += `Files that are heavily depended upon:\n\n`;
+    markdown += 'Files that are heavily depended upon:\n\n';
     mapData.categories.core.slice(0, 10).forEach(file => {
       const relPath = path.relative(mapData.repository, file.path);
       const dependencies = file.callGraphInfo?.calledBy?.length || 0;
@@ -82,11 +83,11 @@ function generateMarkdownMap(mapData, analysis) {
     if (mapData.categories.core.length > 10) {
       markdown += `- ... and ${mapData.categories.core.length - 10} more\n`;
     }
-    markdown += `\n`;
+    markdown += '\n';
   }
   
   if (mapData.features.length > 0) {
-    markdown += `## Features\n\n`;
+    markdown += '## Features\n\n';
     mapData.features.forEach(feature => {
       markdown += `### ${feature.name}\n\n`;
       markdown += `Files: ${feature.fileCount}\n\n`;
@@ -97,12 +98,12 @@ function generateMarkdownMap(mapData, analysis) {
       if (feature.files.length > 5) {
         markdown += `- ... and ${feature.files.length - 5} more\n`;
       }
-      markdown += `\n`;
+      markdown += '\n';
     });
   }
   
-  markdown += `## Key Dependencies\n\n`;
-  markdown += `Files with the most incoming dependencies:\n\n`;
+  markdown += '## Key Dependencies\n\n';
+  markdown += 'Files with the most incoming dependencies:\n\n';
   const sortedByDeps = analysis.files
     .filter(f => f.callGraphInfo?.calledBy?.length > 0)
     .sort((a, b) => (b.callGraphInfo?.calledBy?.length || 0) - (a.callGraphInfo?.calledBy?.length || 0))

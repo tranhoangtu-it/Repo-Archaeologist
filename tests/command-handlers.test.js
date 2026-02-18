@@ -3,13 +3,31 @@ const path = require('path');
 const os = require('os');
 const simpleGit = require('simple-git');
 
-// Mock ora before requiring commands
-jest.mock('ora', () => {
-  return jest.fn(() => ({
+jest.mock('../src/utils/cli-deps', () => {
+  const passthrough = text => text;
+  const bold = text => text;
+  bold.blue = text => text;
+  bold.yellow = text => text;
+
+  const chalk = {
+    green: passthrough,
+    red: passthrough,
+    gray: passthrough,
+    cyan: passthrough,
+    yellow: passthrough,
+    white: passthrough,
+    bold
+  };
+
+  const ora = jest.fn(() => ({
     start: jest.fn().mockReturnThis(),
     succeed: jest.fn().mockReturnThis(),
     fail: jest.fn().mockReturnThis()
   }));
+
+  return {
+    loadCliDeps: jest.fn(async () => ({ chalk, ora }))
+  };
 });
 
 const { analyze } = require('../src/commands/analyze');
@@ -22,6 +40,19 @@ describe('Command Handlers', () => {
   let consoleSpy;
   let errorSpy;
   let exitSpy;
+
+  function getJsonOutput() {
+    const jsonCall = consoleSpy.mock.calls.find(call => {
+      try {
+        JSON.parse(call[0]);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+
+    return jsonCall ? JSON.parse(jsonCall[0]) : null;
+  }
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-cmd-'));
@@ -56,10 +87,7 @@ describe('Command Handlers', () => {
 
     test('should output JSON format', async () => {
       await analyze(tempDir, { format: 'json' });
-      const jsonCall = consoleSpy.mock.calls.find(call => {
-        try { JSON.parse(call[0]); return true; } catch { return false; }
-      });
-      expect(jsonCall).toBeDefined();
+      expect(getJsonOutput()).toBeDefined();
     });
 
     test('should save to output file', async () => {
@@ -77,6 +105,59 @@ describe('Command Handlers', () => {
       ).rejects.toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(errorSpy).toHaveBeenCalled();
+    });
+
+    test('should exclude test files from dead code by default', async () => {
+      await fs.mkdir(path.join(tempDir, 'tests'), { recursive: true });
+      await fs.writeFile(
+        path.join(tempDir, 'tests', 'dead.test.js'),
+        'const testValue = 1;\nmodule.exports = testValue;'
+      );
+
+      await analyze(tempDir, { format: 'json' });
+      const output = getJsonOutput();
+      const deadPaths = output.deadCode.map(file => file.path);
+
+      expect(deadPaths.some(p => p.includes('dead.test.js'))).toBe(false);
+    });
+
+    test('should include test files in dead code when includeTests is enabled', async () => {
+      await fs.mkdir(path.join(tempDir, 'tests'), { recursive: true });
+      await fs.writeFile(
+        path.join(tempDir, 'tests', 'dead.test.js'),
+        'const testValue = 1;\nmodule.exports = testValue;'
+      );
+
+      await analyze(tempDir, { format: 'json', includeTests: true });
+      const output = getJsonOutput();
+      const deadPaths = output.deadCode.map(file => file.path);
+
+      expect(deadPaths.some(p => p.includes('dead.test.js'))).toBe(true);
+    });
+
+    test('should ignore additional paths from ignore option', async () => {
+      await fs.mkdir(path.join(tempDir, 'custom-ignore'), { recursive: true });
+      await fs.writeFile(
+        path.join(tempDir, 'custom-ignore', 'ignored.js'),
+        'const ignoredValue = 1;\nmodule.exports = ignoredValue;'
+      );
+
+      await analyze(tempDir, { format: 'json', ignore: 'custom-ignore' });
+      const output = getJsonOutput();
+      const analyzedPaths = output.files.map(file => file.path);
+
+      expect(analyzedPaths.some(p => p.includes('custom-ignore'))).toBe(false);
+    });
+
+    test('should skip co-change analysis when skipCochange is enabled', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.js'), 'const a = 1;\nmodule.exports = a;');
+      await fs.writeFile(path.join(tempDir, 'b.js'), 'const b = 1;\nmodule.exports = b;');
+      await simpleGit(tempDir).add('.').commit('cochange commit');
+
+      await analyze(tempDir, { format: 'json', skipCochange: true });
+      const output = getJsonOutput();
+
+      expect(output.files.every(file => Array.isArray(file.coChangedFiles) && file.coChangedFiles.length === 0)).toBe(true);
     });
   });
 
